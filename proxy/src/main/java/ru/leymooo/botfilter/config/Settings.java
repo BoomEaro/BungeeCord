@@ -66,6 +66,9 @@ public class Settings extends Config
     @Comment("Сколько времени есть у игрока чтобы пройти защиту. В миллисекундах. 1 сек = 1000")
     public int TIME_OUT = 12700;
 
+    @Comment("Отключить ли ScoreBoardApi? Отключение экономит оперативную память")
+    public boolean DISABLE_SCOREBOARD_API = true;
+
     @Create
     public GEO_IP GEO_IP;
 
