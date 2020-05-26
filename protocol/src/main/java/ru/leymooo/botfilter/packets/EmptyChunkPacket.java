@@ -30,7 +30,11 @@ public class EmptyChunkPacket extends DefinedPacket
         buf.writeInt( this.x );
         buf.writeInt( this.z );
         buf.writeBoolean( true );
-
+        
+        if (version >= ProtocolConstants.MINECRAFT_1_16) {
+            buf.writeBoolean( true );
+        }
+        
         if ( version == ProtocolConstants.MINECRAFT_1_8 )
         {
             buf.writeShort( 1 );
@@ -47,6 +51,7 @@ public class EmptyChunkPacket extends DefinedPacket
                 {
                     buf.writeInt( 0 );
                 }
+
             }
         }
         if ( version < ProtocolConstants.MINECRAFT_1_13 )

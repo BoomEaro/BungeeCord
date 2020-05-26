@@ -10,7 +10,7 @@ public final class PacketsPosition
     {
     }
 
-    public static int LOGIN = 0;
+    //public static int LOGIN = 0;
     public static int CHUNK = 1;
     public static int TIME = 2;
     public static int PLAYERABILITIES = 3;

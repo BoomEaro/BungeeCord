@@ -54,7 +54,7 @@ public class CaptchaGeneration
             BungeeCord.getInstance().getLogger().log( Level.INFO, "[BotFilter] Генерирую капчу [{0}/900]", 900 - ex.getQueue().size() - ex.getActiveCount() );
             try
             {
-                Thread.sleep( 1000L );
+                Thread.sleep( 500L );
             } catch ( InterruptedException ex1 )
             {
                 BungeeCord.getInstance().getLogger().log( Level.WARNING, "[BotFilter] Немогу сгенерировать капчу. Выключаю банджу", ex1 );

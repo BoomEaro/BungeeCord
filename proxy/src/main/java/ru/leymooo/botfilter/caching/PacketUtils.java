@@ -3,8 +3,12 @@ package ru.leymooo.botfilter.caching;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
+
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Random;
+
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -18,6 +22,7 @@ import net.md_5.bungee.protocol.packet.KeepAlive;
 import net.md_5.bungee.protocol.packet.Kick;
 import net.md_5.bungee.protocol.packet.Login;
 import net.md_5.bungee.protocol.packet.PluginMessage;
+
 import ru.leymooo.botfilter.config.Settings;
 import ru.leymooo.botfilter.packets.EmptyChunkPacket;
 import ru.leymooo.botfilter.packets.PlayerAbilities;
@@ -25,6 +30,15 @@ import ru.leymooo.botfilter.packets.PlayerPositionAndLook;
 import ru.leymooo.botfilter.packets.SetExp;
 import ru.leymooo.botfilter.packets.SetSlot;
 import ru.leymooo.botfilter.packets.TimeUpdate;
+import se.llbit.nbt.ByteTag;
+import se.llbit.nbt.CompoundTag;
+import se.llbit.nbt.FloatTag;
+import se.llbit.nbt.IntTag;
+import se.llbit.nbt.ListTag;
+import se.llbit.nbt.LongTag;
+import se.llbit.nbt.NamedTag;
+import se.llbit.nbt.SpecificTag;
+import se.llbit.nbt.StringTag;
 
 /**
  * @author Leymooo
@@ -32,295 +46,374 @@ import ru.leymooo.botfilter.packets.TimeUpdate;
 public class PacketUtils
 {
 
-    public static int PROTOCOLS_COUNT = ProtocolConstants.SUPPORTED_VERSION_IDS.size();
+	public static int PROTOCOLS_COUNT = ProtocolConstants.SUPPORTED_VERSION_IDS.size();
 
-    public static int CLIENTID = new Random().nextInt( Integer.MAX_VALUE - 100 ) + 50;
-    public static int KEEPALIVE_ID = 9876;
+	public static int CLIENTID = new Random().nextInt( Integer.MAX_VALUE - 100 ) + 50;
+	public static int KEEPALIVE_ID = 9876;
 
-    private static final CachedPacket[] cachedPackets = new CachedPacket[ 16 ];
-    private static final HashMap<KickType, CachedPacket> kickMessagesGame = new HashMap<KickType, CachedPacket>( 3 );
-    private static final HashMap<KickType, CachedPacket> kickMessagesLogin = new HashMap<KickType, CachedPacket>( 4 );
+	private static final CachedPacket[] cachedPackets = new CachedPacket[ 16 ];
+	private static final HashMap<KickType, CachedPacket> kickMessagesGame = new HashMap<KickType, CachedPacket>( 3 );
+	private static final HashMap<KickType, CachedPacket> kickMessagesLogin = new HashMap<KickType, CachedPacket>( 4 );
 
-    public static final CachedCaptcha captchas = new CachedCaptcha();
+	private static final ByteBuf[] loginVersions = new ByteBuf[PROTOCOLS_COUNT];
+	
+	public static final CachedCaptcha captchas = new CachedCaptcha();
 
-    public static CachedExpPackets expPackets;
+	public static CachedExpPackets expPackets;
 
-    /**
-     * 0 - Checking_fall, 1 - checking_captcha, 2 - sus
-     */
-    public static CachedTitle[] titles = new CachedTitle[ 3 ];
+	/**
+	 * 0 - Checking_fall, 1 - checking_captcha, 2 - sus
+	 */
+	public static CachedTitle[] titles = new CachedTitle[ 3 ];
 
-    public static ByteBuf createPacket(DefinedPacket packet, int id, int protocol)
-    {
-        final ByteBuf buffer = ByteBufAllocator.DEFAULT.buffer();
-        DefinedPacket.writeVarInt( id, buffer );
-        packet.write( buffer, ProtocolConstants.Direction.TO_CLIENT, protocol );
-        return buffer;
-    }
+	public static ByteBuf createPacket(DefinedPacket packet, int id, int protocol)
+	{
+		final ByteBuf buffer = ByteBufAllocator.DEFAULT.buffer();
+		DefinedPacket.writeVarInt( id, buffer );
+		packet.write( buffer, ProtocolConstants.Direction.TO_CLIENT, protocol );
+		return buffer;
+	}
 
-    public static void init()
-    {
-        if ( expPackets != null )
-        {
-            expPackets.release();
-        }
-        for ( CachedPacket packet : cachedPackets )
-        {
-            if ( packet != null )
-            {
-                packet.release();
-            }
-        }
-        for ( CachedTitle title : titles )
-        {
-            if ( title != null )
-            {
-                title.release();
-            }
-        }
-        for ( CachedPacket packet : kickMessagesGame.values() )
-        {
-            packet.release();
-        }
-        kickMessagesGame.clear();
+	public static void init()
+	{
+		if ( expPackets != null )
+		{
+			expPackets.release();
+		}
+		for ( CachedPacket packet : cachedPackets )
+		{
+			if ( packet != null )
+			{
+				packet.release();
+			}
+		}
+		for ( CachedTitle title : titles )
+		{
+			if ( title != null )
+			{
+				title.release();
+			}
+		}
+		for ( CachedPacket packet : kickMessagesGame.values() )
+		{
+			packet.release();
+		}
+		kickMessagesGame.clear();
 
-        expPackets = new CachedExpPackets();
+		expPackets = new CachedExpPackets();
 
-        titles[0] = new CachedTitle( Settings.IMP.MESSAGES.CHECKING_TITLE, 5, 90, 15 );
-        titles[1] = new CachedTitle( Settings.IMP.MESSAGES.CHECKING_TITLE_CAPTCHA, 5, 15, 10 );
-        titles[2] = new CachedTitle( Settings.IMP.MESSAGES.CHECKING_TITLE_SUS, 5, 20, 10 );
+		titles[0] = new CachedTitle( Settings.IMP.MESSAGES.CHECKING_TITLE, 5, 90, 15 );
+		titles[1] = new CachedTitle( Settings.IMP.MESSAGES.CHECKING_TITLE_CAPTCHA, 5, 15, 10 );
+		titles[2] = new CachedTitle( Settings.IMP.MESSAGES.CHECKING_TITLE_SUS, 5, 20, 10 );
 
-        DefinedPacket[] packets =
-        {
-            new Login( CLIENTID, (short) 2, 0, 1, (short) 0, (short) 100, "flat", 2, false, true ), //0
-            new EmptyChunkPacket( 0, 0 ), //1
-            new TimeUpdate( 1, 23700 ), //2
-            new PlayerAbilities( (byte) 6, 0f, 0f ), //3
-            new PlayerPositionAndLook( 7.00, 450, 7.00, 90f, 38f, 9876, false ), //4
-            new SetSlot( 0, 36, 358, 1, 0 ), //5 map 1.8+
-            new SetSlot( 0, 36, -1, 0, 0 ), //6 map reset
-            new KeepAlive( KEEPALIVE_ID ), //7
-            createMessagePacket( Settings.IMP.MESSAGES.CHECKING_CAPTCHA_WRONG.replaceFirst( "%s", "2" ).replaceFirst( "%s", "попытки" ) ), //8
-            createMessagePacket( Settings.IMP.MESSAGES.CHECKING_CAPTCHA_WRONG.replaceFirst( "%s", "1" ).replaceFirst( "%s", "попытка" ) ), //9
-            createMessagePacket( Settings.IMP.MESSAGES.CHECKING ), //10
-            createMessagePacket( Settings.IMP.MESSAGES.CHECKING_CAPTCHA ), //11
-            createMessagePacket( Settings.IMP.MESSAGES.SUCCESSFULLY ), //12
-            new PlayerPositionAndLook( 7.00, 450, 7.00, 90f, 10f, 9876, false ), //13
-            new SetExp( 0, 0, 0 ), //14
-            createPluginMessage(), //15
-        };
 
-        for ( int i = 0; i < packets.length; i++ )
-        {
-            PacketUtils.cachedPackets[i] = new CachedPacket( packets[i], Protocol.BotFilter, Protocol.GAME );
-        }
-        Protocol kickGame = Protocol.GAME;
-        Protocol kickLogin = Protocol.LOGIN;
+		DefinedPacket[] packets =
+			{
+					//first unused
+				    new EmptyChunkPacket( 0, 0 ), //0
+					new EmptyChunkPacket( 0, 0 ), //1
+					new TimeUpdate( 1, 23700 ), //2
+					new PlayerAbilities( (byte) 6, 0f, 0f ), //3
+					new PlayerPositionAndLook( 7.00, 450, 7.00, 90f, 38f, 9876, false ), //4
+					new SetSlot( 0, 36, 358, 1, 0 ), //5 map 1.8+
+					new SetSlot( 0, 36, -1, 0, 0 ), //6 map reset
+					new KeepAlive( KEEPALIVE_ID ), //7
+					createMessagePacket( Settings.IMP.MESSAGES.CHECKING_CAPTCHA_WRONG.replaceFirst( "%s", "2" ).replaceFirst( "%s", "попытки" ) ), //8
+					createMessagePacket( Settings.IMP.MESSAGES.CHECKING_CAPTCHA_WRONG.replaceFirst( "%s", "1" ).replaceFirst( "%s", "попытка" ) ), //9
+					createMessagePacket( Settings.IMP.MESSAGES.CHECKING ), //10
+					createMessagePacket( Settings.IMP.MESSAGES.CHECKING_CAPTCHA ), //11
+					createMessagePacket( Settings.IMP.MESSAGES.SUCCESSFULLY ), //12
+					new PlayerPositionAndLook( 7.00, 450, 7.00, 90f, 10f, 9876, false ), //13
+					new SetExp( 0, 0, 0 ), //14
+					createPluginMessage(), //15
+			};
 
-        CachedPacket failedMessage = new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_NOT_PLAYER ), kickGame );
-        kickMessagesGame.put( KickType.PING, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_BIG_PING ), kickGame ) );
-        kickMessagesGame.put( KickType.FAILED_CAPTCHA, failedMessage );
-        kickMessagesGame.put( KickType.FAILED_FALLING, failedMessage );
-        kickMessagesGame.put( KickType.TIMED_OUT, failedMessage );
-        kickMessagesGame.put( KickType.COUNTRY, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_COUNTRY ), kickGame ) );
-        kickMessagesLogin.put( KickType.PING, new CachedPacket( createKickPacket( String.join( "", Settings.IMP.SERVER_PING_CHECK.KICK_MESSAGE ) ), kickLogin ) );
-        kickMessagesLogin.put( KickType.MANYCHECKS, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_MANY_CHECKS ), kickLogin ) );
-        kickMessagesLogin.put( KickType.COUNTRY, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_COUNTRY ), kickLogin ) );
-    }
+		for ( int i = 0; i < packets.length; i++ )
+		{
+			PacketUtils.cachedPackets[i] = new CachedPacket( packets[i], Protocol.BotFilter, Protocol.GAME );
+		}
+		
+		{
+			int oldPacketId = -1;
+			ByteBuf oldBuf = null;
+			for ( int version : ProtocolConstants.SUPPORTED_VERSION_IDS )
+			{
+				int versionRewrited = rewriteVersion( version );
+				DefinedPacket packet;
+				if (versionRewrited >= 22) {
+					CompoundTag world = new CompoundTag();
+					world.add("name", new StringTag("minecraft:overworld"));
+					world.add("natural", new ByteTag(1));
+					world.add("ambient_light", new FloatTag(1));
+					world.add("has_ceiling", new ByteTag(0));
+					world.add("has_skylight", new ByteTag(1));
+					world.add("fixed_time", new LongTag(1000));
+					world.add("shrunk", new ByteTag(0));
+					world.add("ultrawarm", new ByteTag(0));
+					world.add("has_raids", new ByteTag(1));
+					world.add("respawn_anchor_works", new ByteTag(0));
+					world.add("bed_works", new ByteTag(1));
+					world.add("piglin_safe", new ByteTag(0));
+					world.add("logical_height", new IntTag(256));
+					world.add("infiniburn", new StringTag("minecraft:infiniburn_overworld"));
+					
+					ListTag li = new ListTag(SpecificTag.TAG_COMPOUND, Arrays.asList(world));
+					
+					CompoundTag ct = new CompoundTag();
+					
+					ct.add("dimension", li);
+					
+					NamedTag map = new NamedTag("", ct);
+					
+					System.out.println("testGG " + map.dumpTree());
+					
+					packet = new Login( CLIENTID, (short) 2, (short) 2, new HashSet<String>(Arrays.asList("minecraft:overworld")), map, "minecraft:overworld", "minecraft:overworld", 1, (short) 0, (short) 100, "flat", 2, false, true, false, true );
+				}
+				else {
+					packet = new Login( CLIENTID, (short) 2, (short) 2, null, null, 0, null, 1, (short) 0, (short) 100, "flat", 2, false, true, false, true );			
+				}
+				
+				int newPacketId = PacketUtils.getPacketId( packet, version, Protocol.BotFilter, Protocol.GAME );
+				if ( newPacketId != oldPacketId )
+				{
+					oldPacketId = newPacketId;
+					oldBuf = PacketUtils.createPacket( packet, oldPacketId, version );
+					loginVersions[versionRewrited] = oldBuf;
+				} else
+				{
+					ByteBuf newBuf = PacketUtils.createPacket( packet, oldPacketId, version );
+					if ( newBuf.equals( oldBuf ) )
+					{
+						loginVersions[versionRewrited] = oldBuf;
+						newBuf.release();
+					} else
+					{
+						oldBuf = newBuf;
+						loginVersions[versionRewrited] = oldBuf;
+					}
+				}
+			}
+		}
+		
+		
+		Protocol kickGame = Protocol.GAME;
+		Protocol kickLogin = Protocol.LOGIN;
 
-    private static DefinedPacket createKickPacket(String message)
-    {
-        return new Kick( ComponentSerializer.toString(
-                TextComponent.fromLegacyText(
-                        ChatColor.translateAlternateColorCodes( '&',
-                                message.replace( "%prefix%", Settings.IMP.MESSAGES.PREFIX ).replace( "%nl%", "\n" ) ) ) ) );
-    }
+		CachedPacket failedMessage = new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_NOT_PLAYER ), kickGame );
+		kickMessagesGame.put( KickType.PING, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_BIG_PING ), kickGame ) );
+		kickMessagesGame.put( KickType.FAILED_CAPTCHA, failedMessage );
+		kickMessagesGame.put( KickType.FAILED_FALLING, failedMessage );
+		kickMessagesGame.put( KickType.TIMED_OUT, failedMessage );
+		kickMessagesGame.put( KickType.COUNTRY, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_COUNTRY ), kickGame ) );
+		kickMessagesLogin.put( KickType.PING, new CachedPacket( createKickPacket( String.join( "", Settings.IMP.SERVER_PING_CHECK.KICK_MESSAGE ) ), kickLogin ) );
+		kickMessagesLogin.put( KickType.MANYCHECKS, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_MANY_CHECKS ), kickLogin ) );
+		kickMessagesLogin.put( KickType.COUNTRY, new CachedPacket( createKickPacket( Settings.IMP.MESSAGES.KICK_COUNTRY ), kickLogin ) );
+	}
 
-    private static DefinedPacket createMessagePacket(String message)
-    {
-        if ( message.isEmpty() )
-        {
-            return null;
-        }
-        return new Chat( ComponentSerializer.toString(
-                TextComponent.fromLegacyText(
-                        ChatColor.translateAlternateColorCodes( '&',
-                                message.replace( "%prefix%", Settings.IMP.MESSAGES.PREFIX ).replace( "%nl%", "\n" ) ) ) ), (byte) ChatMessageType.CHAT.ordinal() );
-    }
+	private static DefinedPacket createKickPacket(String message)
+	{
+		return new Kick( ComponentSerializer.toString(
+				TextComponent.fromLegacyText(
+						ChatColor.translateAlternateColorCodes( '&',
+								message.replace( "%prefix%", Settings.IMP.MESSAGES.PREFIX ).replace( "%nl%", "\n" ) ) ) ) );
+	}
 
-    private static DefinedPacket createPluginMessage()
-    {
-        ByteBuf brand = ByteBufAllocator.DEFAULT.heapBuffer();
-        DefinedPacket.writeString( "BotFilter (https://vk.cc/8hr1pU)", brand );
-        DefinedPacket packet = new PluginMessage( "MC|Brand", DefinedPacket.toArray( brand ), false );
-        brand.release();
-        return packet;
-    }
+	private static DefinedPacket createMessagePacket(String message)
+	{
+		if ( message.isEmpty() )
+		{
+			return null;
+		}
+		return new Chat( ComponentSerializer.toString(
+				TextComponent.fromLegacyText(
+						ChatColor.translateAlternateColorCodes( '&',
+								message.replace( "%prefix%", Settings.IMP.MESSAGES.PREFIX ).replace( "%nl%", "\n" ) ) ) ), (byte) ChatMessageType.CHAT.ordinal() );
+	}
 
-    public static int getPacketId(DefinedPacket packet, int version, Protocol... protocols)
-    {
-        for ( Protocol protocol : protocols )
-        {
-            try
-            {
-                return protocol.TO_CLIENT.getId( packet.getClass(), version );
-            } catch ( Exception ignore )
-            {
-            }
-        }
+	private static DefinedPacket createPluginMessage()
+	{
+		ByteBuf brand = ByteBufAllocator.DEFAULT.heapBuffer();
+		DefinedPacket.writeString( "BotFilter (https://vk.cc/8hr1pU)", brand );
+		DefinedPacket packet = new PluginMessage( "MC|Brand", DefinedPacket.toArray( brand ), false );
+		brand.release();
+		return packet;
+	}
 
-        throw new IllegalStateException( "Can not get id for " + packet.getClass().getSimpleName() + "(" + version + ")" );
-    }
+	public static int getPacketId(DefinedPacket packet, int version, Protocol... protocols)
+	{
+		for ( Protocol protocol : protocols )
+		{
+			try
+			{
+				return protocol.TO_CLIENT.getId( packet.getClass(), version );
+			} catch ( Exception ignore )
+			{
+			}
+		}
 
-    public static void releaseByteBuf(ByteBuf buf)
-    {
-        if ( buf != null && buf.refCnt() != 0 )
-        {
-            while ( buf.refCnt() != 0 )
-            {
-                buf.release();
-            }
-        }
-    }
+		throw new IllegalStateException( "Can not get id for " + packet.getClass().getSimpleName() + "(" + version + ")" );
+	}
 
-    public static void fillArray(ByteBuf[] buffer, DefinedPacket packet, Protocol... protocols)
-    {
-        if ( packet == null )
-        {
-            return;
-        }
-        int oldPacketId = -1;
-        ByteBuf oldBuf = null;
-        for ( int version : ProtocolConstants.SUPPORTED_VERSION_IDS )
-        {
-            int versionRewrited = rewriteVersion( version );
-            int newPacketId = PacketUtils.getPacketId( packet, version, protocols );
-            if ( newPacketId != oldPacketId )
-            {
-                oldPacketId = newPacketId;
-                oldBuf = PacketUtils.createPacket( packet, oldPacketId, version );
-                buffer[versionRewrited] = oldBuf;
-            } else
-            {
-                ByteBuf newBuf = PacketUtils.createPacket( packet, oldPacketId, version );
-                if ( newBuf.equals( oldBuf ) )
-                {
-                    buffer[versionRewrited] = oldBuf;
-                    newBuf.release();
-                } else
-                {
-                    oldBuf = newBuf;
-                    buffer[versionRewrited] = oldBuf;
-                }
-            }
-        }
-    }
+	public static void releaseByteBuf(ByteBuf buf)
+	{
+		if ( buf != null && buf.refCnt() != 0 )
+		{
+			while ( buf.refCnt() != 0 )
+			{
+				buf.release();
+			}
+		}
+	}
 
-    public static int rewriteVersion(int version)
-    {
-        switch ( version )
-        {
-            case ProtocolConstants.MINECRAFT_1_8:
-                return 0;
-            case ProtocolConstants.MINECRAFT_1_9:
-                return 1;
-            case ProtocolConstants.MINECRAFT_1_9_1:
-                return 2;
-            case ProtocolConstants.MINECRAFT_1_9_2:
-                return 3;
-            case ProtocolConstants.MINECRAFT_1_9_4:
-                return 4;
-            case ProtocolConstants.MINECRAFT_1_10:
-                return 5;
-            case ProtocolConstants.MINECRAFT_1_11:
-                return 6;
-            case ProtocolConstants.MINECRAFT_1_11_1:
-                return 7;
-            case ProtocolConstants.MINECRAFT_1_12:
-                return 8;
-            case ProtocolConstants.MINECRAFT_1_12_1:
-                return 9;
-            case ProtocolConstants.MINECRAFT_1_12_2:
-                return 10;
-            case ProtocolConstants.MINECRAFT_1_13:
-                return 11;
-            case ProtocolConstants.MINECRAFT_1_13_1:
-                return 12;
-            case ProtocolConstants.MINECRAFT_1_13_2:
-                return 13;
-            case ProtocolConstants.MINECRAFT_1_14:
-                return 14;
-            case ProtocolConstants.MINECRAFT_1_14_1:
-                return 15;
-            case ProtocolConstants.MINECRAFT_1_14_2:
-                return 16;
-            case ProtocolConstants.MINECRAFT_1_14_3:
-                return 17;
-            case ProtocolConstants.MINECRAFT_1_14_4:
-                return 18;
-            case ProtocolConstants.MINECRAFT_1_15:
-                return 19;
-            case ProtocolConstants.MINECRAFT_1_15_1:
-                return 20;
-            case ProtocolConstants.MINECRAFT_1_15_2:
-                return 21;
-            default:
-                throw new IllegalArgumentException( "Version is not supported" );
-        }
-    }
+	public static void fillArray(ByteBuf[] buffer, DefinedPacket packet, Protocol... protocols)
+	{
+		if ( packet == null )
+		{
+			return;
+		}
+		int oldPacketId = -1;
+		ByteBuf oldBuf = null;
+		for ( int version : ProtocolConstants.SUPPORTED_VERSION_IDS )
+		{
+			int versionRewrited = rewriteVersion( version );
+			int newPacketId = PacketUtils.getPacketId( packet, version, protocols );
+			if ( newPacketId != oldPacketId )
+			{
+				oldPacketId = newPacketId;
+				oldBuf = PacketUtils.createPacket( packet, oldPacketId, version );
+				buffer[versionRewrited] = oldBuf;
+			} else
+			{
+				ByteBuf newBuf = PacketUtils.createPacket( packet, oldPacketId, version );
+				if ( newBuf.equals( oldBuf ) )
+				{
+					buffer[versionRewrited] = oldBuf;
+					newBuf.release();
+				} else
+				{
+					oldBuf = newBuf;
+					buffer[versionRewrited] = oldBuf;
+				}
+			}
+		}
+	}
 
-    public static void spawnPlayer(Channel channel, int version, boolean disableFall, boolean captcha)
-    {
-        channel.write( getCachedPacket( PacketsPosition.LOGIN ).get( version ), channel.voidPromise() );
-        channel.write( getCachedPacket( PacketsPosition.PLUGIN_MESSAGE ).get( version ), channel.voidPromise() );
-        channel.write( getCachedPacket( PacketsPosition.CHUNK ).get( version ), channel.voidPromise() );
-        if ( disableFall )
-        {
-            channel.write( getCachedPacket( PacketsPosition.PLAYERABILITIES ).get( version ), channel.voidPromise() );
-        }
-        if ( captcha )
-        {
-            channel.write( getCachedPacket( PacketsPosition.PLAYERPOSANDLOOK_CAPTCHA ).get( version ), channel.voidPromise() );
-        } else
-        {
-            channel.write( getCachedPacket( PacketsPosition.PLAYERPOSANDLOOK ).get( version ), channel.voidPromise() );
+	public static int rewriteVersion(int version)
+	{
+		switch ( version )
+		{
+		case ProtocolConstants.MINECRAFT_1_8:
+			return 0;
+		case ProtocolConstants.MINECRAFT_1_9:
+			return 1;
+		case ProtocolConstants.MINECRAFT_1_9_1:
+			return 2;
+		case ProtocolConstants.MINECRAFT_1_9_2:
+			return 3;
+		case ProtocolConstants.MINECRAFT_1_9_4:
+			return 4;
+		case ProtocolConstants.MINECRAFT_1_10:
+			return 5;
+		case ProtocolConstants.MINECRAFT_1_11:
+			return 6;
+		case ProtocolConstants.MINECRAFT_1_11_1:
+			return 7;
+		case ProtocolConstants.MINECRAFT_1_12:
+			return 8;
+		case ProtocolConstants.MINECRAFT_1_12_1:
+			return 9;
+		case ProtocolConstants.MINECRAFT_1_12_2:
+			return 10;
+		case ProtocolConstants.MINECRAFT_1_13:
+			return 11;
+		case ProtocolConstants.MINECRAFT_1_13_1:
+			return 12;
+		case ProtocolConstants.MINECRAFT_1_13_2:
+			return 13;
+		case ProtocolConstants.MINECRAFT_1_14:
+			return 14;
+		case ProtocolConstants.MINECRAFT_1_14_1:
+			return 15;
+		case ProtocolConstants.MINECRAFT_1_14_2:
+			return 16;
+		case ProtocolConstants.MINECRAFT_1_14_3:
+			return 17;
+		case ProtocolConstants.MINECRAFT_1_14_4:
+			return 18;
+		case ProtocolConstants.MINECRAFT_1_15:
+			return 19;
+		case ProtocolConstants.MINECRAFT_1_15_1:
+			return 20;
+		case ProtocolConstants.MINECRAFT_1_15_2:
+			return 21;
+		case ProtocolConstants.MINECRAFT_1_16:
+			return 22;
+		default:
+			throw new IllegalArgumentException( "Version is not supported" );
+		}
+	}
 
-        }
-        channel.write( getCachedPacket( PacketsPosition.TIME ).get( version ), channel.voidPromise() );
-        //channel.flush(); Не очищяем поскольку это будет в другом месте
-    }
+	public static void spawnPlayer(Channel channel, int version, boolean disableFall, boolean captcha)
+	{
 
-    public static void kickPlayer(KickType kick, Protocol protocol, ChannelWrapper wrapper, int version)
-    {
-        if ( !wrapper.getHandle().isActive() || wrapper.isClosed() || wrapper.isClosing() )
-        {
-            return;
-        }
-        if ( protocol == Protocol.GAME )
-        {
-            wrapper.close( kickMessagesGame.get( kick ).get( version ) );
-        } else
-        {
-            wrapper.close( kickMessagesLogin.get( kick ).get( version ) );
-        }
+		int rv = rewriteVersion(version);
+		channel.write( getLoginPacket( rv ), channel.voidPromise() );
 
-    }
+		channel.write( getCachedPacket( PacketsPosition.PLUGIN_MESSAGE ).get( version ), channel.voidPromise() );
+		channel.write( getCachedPacket( PacketsPosition.CHUNK ).get( version ), channel.voidPromise() );
+		if ( disableFall )
+		{
+			channel.write( getCachedPacket( PacketsPosition.PLAYERABILITIES ).get( version ), channel.voidPromise() );
+		}
+		if ( captcha )
+		{
+			channel.write( getCachedPacket( PacketsPosition.PLAYERPOSANDLOOK_CAPTCHA ).get( version ), channel.voidPromise() );
+		} else
+		{
+			channel.write( getCachedPacket( PacketsPosition.PLAYERPOSANDLOOK ).get( version ), channel.voidPromise() );
 
-    public static CachedPacket getCachedPacket(int pos)
-    {
-        return cachedPackets[pos];
-    }
+		}
+		channel.write( getCachedPacket( PacketsPosition.TIME ).get( version ), channel.voidPromise() );
+		//channel.flush(); Не очищяем поскольку это будет в другом месте
+	}
 
-    public static enum KickType
-    {
-        MANYCHECKS,
-        FAILED_CAPTCHA,
-        FAILED_FALLING,
-        TIMED_OUT,
-        COUNTRY,
-        LEAVED,
-        // THROTTLE,
-        PING;
-    }
+	public static void kickPlayer(KickType kick, Protocol protocol, ChannelWrapper wrapper, int version)
+	{
+		if ( !wrapper.getHandle().isActive() || wrapper.isClosed() || wrapper.isClosing() )
+		{
+			return;
+		}
+		if ( protocol == Protocol.GAME )
+		{
+			wrapper.close( kickMessagesGame.get( kick ).get( version ) );
+		} else
+		{
+			wrapper.close( kickMessagesLogin.get( kick ).get( version ) );
+		}
+
+	}
+
+	public static CachedPacket getCachedPacket(int pos)
+	{
+		return cachedPackets[pos];
+	}
+	
+	public static ByteBuf getLoginPacket(int pos)
+	{
+		return loginVersions[pos].retainedDuplicate();
+	}
+
+
+	public static enum KickType
+	{
+		MANYCHECKS,
+		FAILED_CAPTCHA,
+		FAILED_FALLING,
+		TIMED_OUT,
+		COUNTRY,
+		LEAVED,
+		// THROTTLE,
+		PING;
+	}
 
 }
